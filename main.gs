@@ -13,6 +13,34 @@ function GetJSON(aUrl) {
   }
 }
 
+// M1b-取得資料 JSON（含重試，失敗回傳 null 供 fallback 使用）
+// options: { maxAttempts: 3, delaySeconds: 2 }
+function GetJSONWithRetry(aUrl, options) {
+  var maxAttempts = (options && options.maxAttempts) ? options.maxAttempts : 3;
+  var delaySeconds = (options && options.delaySeconds) ? options.delaySeconds : 2;
+  var lastError = null;
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      var response = UrlFetchApp.fetch(aUrl, { muteHttpExceptions: true });
+      var code = response.getResponseCode();
+      if (code !== 200) {
+        lastError = "HTTP " + code;
+        Logger.log("- 1. 取得失敗 第 %d 次（%s）: %s", attempt, aUrl, lastError);
+      } else {
+        var parsed = JSON.parse(response.getContentText());
+        Logger.log("+ 1. 資料取得成功（%s）第 %d 次", aUrl, attempt);
+        return parsed;
+      }
+    } catch (e) {
+      lastError = (e.message && e.message.indexOf("JSON") !== -1) ? "Invalid JSON" : (e.message || String(e));
+      Logger.log("- 1. 取得失敗 第 %d 次（%s）: %s", attempt, aUrl, lastError);
+    }
+    if (attempt < maxAttempts) Utilities.sleep(delaySeconds * 1000);
+  }
+  Logger.log("- 1. 重試 %d 次後仍失敗（%s）: %s", maxAttempts, aUrl, lastError || "unknown");
+  return null;
+}
+
 // M2-檢查標籤
 function CheckLabel(label_name) {
   if (!GmailApp.getUserLabelByName(label_name)) {
